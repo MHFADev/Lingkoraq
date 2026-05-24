@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Lingkoraq - Premium Bio Link Platform & Visual Editor",
     description: "Create stunning bio-link pages with Lingkoraq. The most advanced hybrid visual + code editor for professional bio links.",
-    images: ["/og-image.png"],
+    images: ["/favicon.svg"],
     creator: "@mhfadev",
   },
   robots: {
@@ -68,10 +68,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.png", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg" },
     ],
-    shortcut: "/favicon.png",
-    apple: "/apple-touch-icon.png",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
   },
   manifest: "/manifest.json",
 };
