@@ -31,7 +31,11 @@ class MusicScraperService {
     'https://invidious.fdn.fr',
     'https://invidious.nerdvpn.de',
     'https://yewtu.be',
-    'https://inv.riverside.rocks'
+    'https://inv.riverside.rocks',
+    'https://invidious.lunar.icu',
+    'https://invidious.projectsegfau.lt',
+    'https://invidious.tiekoetter.com',
+    'https://inv.vern.cc'
   ];
   
   /**
@@ -329,6 +333,15 @@ class MusicScraperService {
   }
   
   private decodeHTMLEntities(text: string): string {
+    if (typeof document === 'undefined') {
+      // Server-side fallback
+      return text
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    }
     const textArea = document.createElement('textarea');
     textArea.innerHTML = text;
     return textArea.value;
@@ -337,11 +350,13 @@ class MusicScraperService {
   private isLikelyMusic(title: string): boolean {
     const musicKeywords = [
       'official', 'audio', 'lyric', 'lyrics', 'music video', 
-      'mv', 'ft.', 'feat.', 'remix', 'cover', 'song', 'track'
+      'mv', 'ft.', 'feat.', 'remix', 'cover', 'song', 'track',
+      'karaoke', 'instrumental', 'remastered', 'live'
     ];
     
     const lowerTitle = title.toLowerCase();
-    return musicKeywords.some(keyword => lowerTitle.includes(keyword));
+    // Jika title sangat pendek atau mengandung kata kunci musik, anggap musik
+    return lowerTitle.length < 30 || musicKeywords.some(keyword => lowerTitle.includes(keyword));
   }
   
   /**

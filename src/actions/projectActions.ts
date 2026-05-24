@@ -3,16 +3,7 @@
 import { createClientServer } from "@/lib/supabaseServer";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { Project } from "@/types";
-
-function sanitizeSlug(slug: string): string {
-  return slug
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 50) || "my-page";
-}
+import { sanitizeSlug } from "@/lib/utils";
 
 /**
  * Ensure the user record exists in public.users.
@@ -62,40 +53,59 @@ export async function createProject(data: {
 
     await ensureUserRecord(user);
 
-    const slug = sanitizeSlug(data.slug);
-
-    // Check if slug already exists for this user
-    const { data: existing } = await supabase.from("projects").select("id").eq("slug", slug).eq("user_id", user.id).maybeSingle();
-
-    if (existing) {
-      // Update instead
-      const { data: project, error } = await supabase.from("projects")
-        .update({ title: data.title, html_code: data.html_code, css_code: data.css_code, js_code: data.js_code, favicon_url: data.favicon_url, updated_at: new Date().toISOString() })
-        .eq("id", existing.id).eq("user_id", user.id).select().single();
-      if (error) throw error;
-      return { success: true, project: project as Project };
-    }
+    let finalSlug = sanitizeSlug(data.slug);
 
     // Cek apakah slug sudah digunakan oleh user lain
-    const { data: existingByOtherUser } = await supabase
+    const { data: existingSlugProject } = await supabase
       .from("projects")
-      .select("id")
-      .eq("slug", slug)
-      .neq("user_id", user.id)
+      .select("id, user_id")
+      .eq("slug", finalSlug)
       .maybeSingle();
 
-    if (existingByOtherUser) {
-      return { success: false, error: "Slug is already taken by someone else!" };
+    if (existingSlugProject) {
+      if (existingSlugProject.user_id === user.id) {
+        // Jika milik user ini, update project tersebut
+        const { data: project, error } = await supabase.from("projects")
+          .update({ title: data.title, html_code: data.html_code, css_code: data.css_code, js_code: data.js_code, favicon_url: data.favicon_url, updated_at: new Date().toISOString() })
+          .eq("id", existingSlugProject.id).eq("user_id", user.id).select().single();
+        if (error) throw error;
+        return { success: true, project: project as Project };
+      }
+
+      // Jika milik orang lain, coba generate slug alternatif
+      let alternativeSlug = finalSlug;
+      let counter = 1;
+      let foundAvailableSlug = false;
+      
+      while (counter <= 10) {
+        alternativeSlug = `${finalSlug}-${counter}`;
+        const { data: checkSlug } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("slug", alternativeSlug)
+          .maybeSingle();
+        
+        if (!checkSlug) {
+          foundAvailableSlug = true;
+          finalSlug = alternativeSlug;
+          break;
+        }
+        counter++;
+      }
+      
+      if (!foundAvailableSlug) {
+        finalSlug = `${finalSlug}-${Math.random().toString(36).slice(2, 8)}`;
+      }
     }
 
     const { data: project, error } = await supabase.from("projects")
-      .insert({ user_id: user.id, slug, title: data.title, html_code: data.html_code, css_code: data.css_code, js_code: data.js_code, preview_img: data.preview_img, favicon_url: data.favicon_url })
+      .insert({ user_id: user.id, slug: finalSlug, title: data.title, html_code: data.html_code, css_code: data.css_code, js_code: data.js_code, preview_img: data.preview_img, favicon_url: data.favicon_url })
       .select().single();
 
     if (error) {
       if (error.code === "23505") {
-        // Slug sudah digunakan oleh user lain
-        return { success: false, error: "Slug is already taken by someone else!" };
+        // Masih unik violation setelah generator? Berarti ada race condition atau generator gagal.
+        return { success: false, error: "Slug is already taken! Please try another one." };
       }
       throw error;
     }
@@ -119,21 +129,61 @@ export async function updateProject(id: string, data: { slug?: string; title?: s
     
     // Jika slug diubah, perlu validasi
     if (data.slug) {
-      const newSlug = sanitizeSlug(data.slug);
+      let finalSlug = sanitizeSlug(data.slug);
       
-      // Cek apakah slug sudah digunakan oleh user lain
-      const { data: existingByOtherUser } = await supabase
+      // Dapatkan slug lama project untuk membandingkan
+      const { data: currentProject } = await supabase
         .from("projects")
-        .select("id, user_id")
-        .eq("slug", newSlug)
-        .neq("user_id", user.id)
+        .select("slug")
+        .eq("id", id)
+        .eq("user_id", user.id)
         .maybeSingle();
       
-      if (existingByOtherUser) {
-        return { success: false, error: "Slug is already taken by someone else!" };
+      // Jika slug baru sama dengan slug lama, tidak perlu validasi
+      if (currentProject && currentProject.slug === finalSlug) {
+        payload.slug = finalSlug;
+      } else {
+        // Cek apakah slug sudah digunakan oleh project lain (siapapun pemiliknya)
+        const { data: existingSlugProject } = await supabase
+          .from("projects")
+          .select("id, user_id")
+          .eq("slug", finalSlug)
+          .neq("id", id) // Kecualikan project yang sedang di-update ini
+          .maybeSingle();
+        
+        if (existingSlugProject) {
+          if (existingSlugProject.user_id === user.id) {
+            return { success: false, error: "You are already using this slug on another project! Please use a different one." };
+          }
+
+          // Jika milik orang lain, coba generate slug alternatif
+          let alternativeSlug = finalSlug;
+          let counter = 1;
+          let foundAvailableSlug = false;
+          
+          while (counter <= 10) {
+            alternativeSlug = `${finalSlug}-${counter}`;
+            const { data: checkSlug } = await supabase
+              .from("projects")
+              .select("id")
+              .eq("slug", alternativeSlug)
+              .maybeSingle();
+            
+            if (!checkSlug) {
+              foundAvailableSlug = true;
+              finalSlug = alternativeSlug;
+              break;
+            }
+            counter++;
+          }
+          
+          if (!foundAvailableSlug) {
+            finalSlug = `${finalSlug}-${Math.random().toString(36).slice(2, 8)}`;
+          }
+        }
+        
+        payload.slug = finalSlug;
       }
-      
-      payload.slug = newSlug;
     }
 
     // Use maybeSingle() so 0 matching rows returns null instead of throwing PGRST116
@@ -142,8 +192,7 @@ export async function updateProject(id: string, data: { slug?: string; title?: s
 
     if (error) {
       if (error.code === "23505") {
-        // Ini seharusnya tidak terjadi karena sudah kita cek di atas
-        return { success: false, error: "Slug is already taken by someone else!" };
+        return { success: false, error: "This slug is already taken! Please try another one." };
       }
       throw error;
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, Music, Loader2, Play } from "lucide-react";
+import { searchMusicAction } from "@/actions/musicActions";
 
 interface SongResult {
   id: string;
@@ -47,11 +48,8 @@ export default function MusicSearchModal({ isOpen, onClose, onSelect }: MusicSea
     setError(null);
 
     try {
-      // Import music scraper service
-      const { searchMusic: searchMusicService } = await import("@/lib/musicScraper");
-      
-      // Gunakan service scraping baru
-      const searchResults = await searchMusicService(searchQuery, {
+      // Gunakan server action untuk menghindari CORS issue
+      const searchResults = await searchMusicAction(searchQuery, {
         limit: 15,
         filter: 'songs'
       });

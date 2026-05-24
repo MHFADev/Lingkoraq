@@ -22,6 +22,7 @@ import { uploadImageToGitHub } from "@/actions/githubStorage";
 import { createProject, updateProject, getUserProjects, getProjectById, checkSlugTaken, saveUserProfile, loadUserProfile } from "@/actions/projectActions";
 import { compressImageToWebp } from "@/lib/imageCompression";
 import { createClientBrowser } from "@/lib/supabaseBrowser";
+import { sanitizeSlug } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 import DonationPopup from "@/components/DonationPopup";
 import MusicSearchModal from "@/components/MusicSearchModal";
@@ -355,10 +356,17 @@ export default function EditorPage() {
   const verifySlugStatus = async () => {
     if (!store.slug) return;
     setSlugStatus("loading");
+    
+    // Jika slug sama dengan slug project saat ini, anggap available
+    if (store.projectId) {
+      const { success, project } = await getProjectById(store.projectId);
+      if (success && project && project.slug === sanitizeSlug(store.slug)) {
+        setSlugStatus("available");
+        return;
+      }
+    }
+
     const taken = await checkSlugTaken(store.slug);
-    // If it's already their own project's slug, it shouldn't show as "taken" but wait,
-    // they can just save to find out, or we can just say "available" if it's theirs!
-    // Since checkSlugTaken just tests global presence, we will just use it to hint.
     setSlugStatus(taken ? "taken" : "available");
   };
 

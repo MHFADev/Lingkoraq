@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { Providers } from "@/components/providers";
+
 import Script from "next/script";
 
 const geistSans = Geist({
@@ -67,9 +68,9 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.png", type: "image/png" },
     ],
-    shortcut: "/favicon.svg",
+    shortcut: "/favicon.png",
     apple: "/apple-touch-icon.png",
   },
   manifest: "/manifest.json",

@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { Check, X, AlertTriangle, RefreshCw, Play, Search } from "lucide-react";
 import { motion } from "framer-motion";
-import { checkMusicServiceStatus, searchMusic, getMusicStreamUrl } from "@/lib/musicScraper";
+import { 
+  checkMusicServiceStatusAction, 
+  searchMusicAction, 
+  getMusicStreamUrlAction 
+} from "@/actions/musicActions";
 
 interface ServiceStatus {
   invidious: boolean;
@@ -37,7 +41,7 @@ export default function MusicServiceStatus() {
   const checkStatus = async () => {
     setIsChecking(true);
     try {
-      const status = await checkMusicServiceStatus();
+      const status = await checkMusicServiceStatusAction();
       setServiceStatus(status);
     } catch (error) {
       console.error("Status check error:", error);
@@ -61,7 +65,7 @@ export default function MusicServiceStatus() {
     setTestResults([...newResults]);
     
     try {
-      const status = await checkMusicServiceStatus();
+      const status = await checkMusicServiceStatusAction();
       newResults[0] = {
         name: "Service Availability Check",
         status: status.overall ? 'passed' : 'failed',
@@ -84,7 +88,7 @@ export default function MusicServiceStatus() {
     setTestResults([...newResults]);
     
     try {
-      const results = await searchMusic(searchTestQuery, { limit: 3, filter: 'songs' });
+      const results = await searchMusicAction(searchTestQuery, { limit: 3, filter: 'songs' });
       setSearchTestResults(results);
       
       newResults[1] = {
@@ -109,7 +113,7 @@ export default function MusicServiceStatus() {
     setTestResults([...newResults]);
     
     try {
-      const url = await getMusicStreamUrl(streamTestVideoId);
+      const url = await getMusicStreamUrlAction(streamTestVideoId);
       setStreamTestUrl(url);
       
       newResults[2] = {

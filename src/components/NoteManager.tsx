@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Music, X, Plus, Trash2, Edit2, Play, RefreshCw } from "lucide-react";
+import { Music, X, Plus, Trash2, Edit2, Play, RefreshCw, Check } from "lucide-react";
 import { useEditorStore } from "@/store/useEditorStore";
 import MusicSearchModal from "./MusicSearchModal";
-import { useRealtimeNotes, type Note as RealtimeNote } from "@/lib/realtime";
 
 interface Note {
   id: string;
@@ -27,111 +26,96 @@ export default function NoteManager() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  // Inisialisasi realtime sync
-  const realtimeSync = useRealtimeNotes(store.projectId || "default");
-
-  // Load notes dari Supabase
+  // Load notes dari localStorage sebagai fallback
   const loadNotes = useCallback(async () => {
-    if (!store.projectId) return;
-    
     setIsSyncing(true);
     try {
-      const realtimeNotes = await realtimeSync.getNotes();
-      const formattedNotes: Note[] = realtimeNotes.map(note => ({
-        id: note.id,
-        text: note.text,
-        musicId: note.music_id,
-        musicTitle: note.music_title,
-        musicArtist: note.music_artist,
-        musicThumbnail: note.music_thumbnail,
-        createdAt: new Date(note.created_at),
-      }));
-      
-      setNotes(formattedNotes);
+      // Coba load dari localStorage terlebih dahulu
+      const savedNotes = localStorage.getItem(`notes_${store.projectId || 'default'}`);
+      if (savedNotes) {
+        const parsedNotes = JSON.parse(savedNotes);
+        const formattedNotes: Note[] = parsedNotes.map((note: any) => ({
+          id: note.id || Date.now().toString(),
+          text: note.text,
+          musicId: note.musicId,
+          musicTitle: note.musicTitle,
+          musicArtist: note.musicArtist,
+          musicThumbnail: note.musicThumbnail,
+          createdAt: new Date(note.createdAt || Date.now()),
+        }));
+        setNotes(formattedNotes);
+      } else {
+        // Default notes jika tidak ada data
+        const defaultNotes: Note[] = [
+          {
+            id: "1",
+            text: "Welcome to your notes! Add your thoughts, ideas, or attach music.",
+            createdAt: new Date(),
+          },
+          {
+            id: "2",
+            text: "Try attaching music by clicking the music icon below.",
+            createdAt: new Date(Date.now() - 3600000),
+          },
+        ];
+        setNotes(defaultNotes);
+      }
       setLastSync(new Date());
     } catch (error) {
       console.error("Error loading notes:", error);
     } finally {
       setIsSyncing(false);
     }
-  }, [store.projectId, realtimeSync]);
+  }, [store.projectId]);
 
-  // Setup realtime listeners
+  // Setup listeners
   useEffect(() => {
-    if (!store.projectId || !isExpanded) return;
-
-    // Connect to realtime
-    realtimeSync.connect();
-
-    // Load initial notes
+    if (!isExpanded) return;
     loadNotes();
-
-    // Setup listeners for realtime updates
-    const insertListenerId = realtimeSync.onInsert((newNote) => {
-      const formattedNote: Note = {
-        id: newNote.id,
-        text: newNote.text,
-        musicId: newNote.music_id,
-        musicTitle: newNote.music_title,
-        musicArtist: newNote.music_artist,
-        musicThumbnail: newNote.music_thumbnail,
-        createdAt: new Date(newNote.created_at),
-      };
-      setNotes(prev => [formattedNote, ...prev.filter(n => n.id !== formattedNote.id)]);
-    });
-
-    const updateListenerId = realtimeSync.onUpdate((updatedNote) => {
-      const formattedNote: Note = {
-        id: updatedNote.id,
-        text: updatedNote.text,
-        musicId: updatedNote.music_id,
-        musicTitle: updatedNote.music_title,
-        musicArtist: updatedNote.music_artist,
-        musicThumbnail: updatedNote.music_thumbnail,
-        createdAt: new Date(updatedNote.created_at),
-      };
-      setNotes(prev => prev.map(n => n.id === formattedNote.id ? formattedNote : n));
-    });
-
-    const deleteListenerId = realtimeSync.onDelete((deletedNote) => {
-      setNotes(prev => prev.filter(n => n.id !== deletedNote.id));
-    });
-
-    // Cleanup
-    return () => {
-      realtimeSync.removeListener(insertListenerId);
-      realtimeSync.removeListener(updateListenerId);
-      realtimeSync.removeListener(deleteListenerId);
-      realtimeSync.disconnect();
-    };
-  }, [store.projectId, isExpanded, realtimeSync, loadNotes]);
+  }, [isExpanded, loadNotes]);
 
   const handleAddNote = async () => {
     if (!noteText.trim() && !store.noteMusicId) return;
-    if (!store.projectId) return;
 
     setIsSyncing(true);
     try {
-      const newNote = await realtimeSync.createNote({
-        user_id: "current-user", // Akan diganti dengan user ID asli
-        project_id: store.projectId,
+      const newNote: Note = {
+        id: Date.now().toString(),
         text: noteText,
-        music_id: store.noteMusicId,
-        music_title: store.noteMusicTitle,
-        music_artist: store.noteMusicArtist,
-        music_thumbnail: store.noteMusicThumbnail,
+        musicId: store.noteMusicId,
+        musicTitle: store.noteMusicTitle,
+        musicArtist: store.noteMusicArtist,
+        musicThumbnail: store.noteMusicThumbnail,
+        createdAt: new Date(),
+      };
+
+      // Simpan ke localStorage
+      const updatedNotes = [newNote, ...notes];
+      setNotes(updatedNotes);
+      
+      // Simpan ke localStorage
+      localStorage.setItem(`notes_${store.projectId || 'default'}`, JSON.stringify(updatedNotes));
+      
+      // Update store dengan note terbaru untuk ditampilkan di preview
+      store.updateProfile({
+        noteText: noteText,
+        noteMusicId: store.noteMusicId,
+        noteMusicTitle: store.noteMusicTitle,
+        noteMusicArtist: store.noteMusicArtist,
+        noteMusicThumbnail: store.noteMusicThumbnail,
+        showNote: true, // Pastikan note ditampilkan
       });
 
-      if (newNote) {
-        setNoteText("");
-        // Clear music attachment from store
-        store.updateProfile({
-          noteMusicId: "",
-          noteMusicTitle: "",
-          noteMusicArtist: "",
-          noteMusicThumbnail: "",
-        });
-      }
+      // Clear input
+      setNoteText("");
+      
+      // Clear music attachment from store
+      store.updateProfile({
+        noteMusicId: "",
+        noteMusicTitle: "",
+        noteMusicArtist: "",
+        noteMusicThumbnail: "",
+      });
     } catch (error) {
       console.error("Error creating note:", error);
     } finally {
@@ -140,30 +124,47 @@ export default function NoteManager() {
   };
 
   const handleUpdateNote = async () => {
-    if (!editingNote || !store.projectId) return;
+    if (!editingNote) return;
 
     setIsSyncing(true);
     try {
-      const updated = await realtimeSync.updateNote(editingNote.id, {
+      const updatedNote: Note = {
+        ...editingNote,
         text: noteText,
-        music_id: store.noteMusicId || editingNote.musicId,
-        music_title: store.noteMusicTitle || editingNote.musicTitle,
-        music_artist: store.noteMusicArtist || editingNote.musicArtist,
-        music_thumbnail: store.noteMusicThumbnail || editingNote.musicThumbnail,
+        musicId: store.noteMusicId || editingNote.musicId,
+        musicTitle: store.noteMusicTitle || editingNote.musicTitle,
+        musicArtist: store.noteMusicArtist || editingNote.musicArtist,
+        musicThumbnail: store.noteMusicThumbnail || editingNote.musicThumbnail,
+      };
+
+      // Update di state
+      const updatedNotes = notes.map(n => n.id === updatedNote.id ? updatedNote : n);
+      setNotes(updatedNotes);
+      
+      // Simpan ke localStorage
+      localStorage.setItem(`notes_${store.projectId || 'default'}`, JSON.stringify(updatedNotes));
+
+      // Update store dengan note terbaru untuk ditampilkan di preview
+      store.updateProfile({
+        noteText: noteText,
+        noteMusicId: store.noteMusicId,
+        noteMusicTitle: store.noteMusicTitle,
+        noteMusicArtist: store.noteMusicArtist,
+        noteMusicThumbnail: store.noteMusicThumbnail,
+        showNote: true, // Pastikan note ditampilkan
       });
 
-      if (updated) {
-        setEditingNote(null);
-        setNoteText("");
-        
-        // Clear music attachment from store
-        store.updateProfile({
-          noteMusicId: "",
-          noteMusicTitle: "",
-          noteMusicArtist: "",
-          noteMusicThumbnail: "",
-        });
-      }
+      // Clear editing state
+      setEditingNote(null);
+      setNoteText("");
+      
+      // Clear music attachment from store
+      store.updateProfile({
+        noteMusicId: "",
+        noteMusicTitle: "",
+        noteMusicArtist: "",
+        noteMusicThumbnail: "",
+      });
     } catch (error) {
       console.error("Error updating note:", error);
     } finally {
@@ -172,14 +173,14 @@ export default function NoteManager() {
   };
 
   const handleDeleteNote = async (id: string) => {
-    if (!store.projectId) return;
-
     setIsSyncing(true);
     try {
-      const success = await realtimeSync.deleteNote(id);
-      if (success) {
-        // Note akan dihapus secara realtime melalui listener
-      }
+      // Hapus dari state
+      const updatedNotes = notes.filter(n => n.id !== id);
+      setNotes(updatedNotes);
+      
+      // Simpan ke localStorage
+      localStorage.setItem(`notes_${store.projectId || 'default'}`, JSON.stringify(updatedNotes));
     } catch (error) {
       console.error("Error deleting note:", error);
     } finally {
