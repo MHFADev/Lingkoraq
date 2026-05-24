@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     siteName: "Lingkoraq",
     images: [
       {
-        url: "/og-image.png",
+        url: "/favicon.svg",
         width: 1200,
         height: 630,
         alt: "Lingkoraq - Premium Bio Link Platform",
